@@ -57,6 +57,10 @@ class PairThreebodyTable : public Pair {
     Table *mltable;             // threebody table
   };
 
+  double interpolate1D(double, double, double);
+  double interpolate2D(double, double, double, double, double, double);
+  double interpolate3D(double, double, double, double, double, double, double, double, double,double,double);
+
  protected:
   double cutmax;      // max cutoff for all elements
   Param *params;      // parameter set for an I-J-K interaction

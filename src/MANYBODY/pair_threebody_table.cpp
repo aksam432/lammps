@@ -31,6 +31,7 @@
 
 #include <cmath>
 #include <cstring>
+#include<iostream>
 
 using namespace LAMMPS_NS;
 using MathConst::MY_PI;
@@ -70,6 +71,31 @@ PairThreebodyTable::~PairThreebodyTable()
   }
 }
 
+/*-----------------------------------------------------------------------
+  3DInterpolation code
+-------------------------------------------------------------------------*/
+
+double PairThreebodyTable::interpolate1D(double v1, double v2, double x)
+{
+	return v1*(1-x)+v2*x;
+}
+
+double PairThreebodyTable::interpolate2D(double v1, double v2, double v3, double v4, double x, double y)
+{
+	double s, t;
+	s=interpolate1D(v1, v2, x);
+	t=interpolate1D(v3, v4, x);
+	return interpolate1D(s, t, y);
+}
+double PairThreebodyTable::interpolate3D(double v1, double v2, double v3, double v4, double v5, double v6, double v7, double v8, double x, double y, double z)
+{
+	double s,t;
+	s=interpolate2D(v1, v2, v3, v4, x, y);
+	t=interpolate2D(v5, v6, v7, v8, x, y);
+	 return interpolate1D(s, t, z);
+}
+
+  
 /* ---------------------------------------------------------------------- */
 
 void PairThreebodyTable::compute(int eflag, int vflag)
@@ -727,7 +753,8 @@ void PairThreebodyTable::uf_lookup(Param *pm, double r12, double r13, double the
     itable *= (pm->mltable->ninput * 2);
     itable += ntheta;
   }
-
+  std::cout<<" itab dis theta:"<<itable<<"\t"<<r12<<"\t"<<r13<<"\t"<<theta<<std::endl;
+  std::cout<<"itab bin"<<itable<<"\t"<<nr12<<"\t"<<nr13<<"\t"<<ntheta<<std::endl;
   f11 = pm->mltable->f11file[itable];
   f12 = pm->mltable->f12file[itable];
   f21 = pm->mltable->f21file[itable];
@@ -735,6 +762,7 @@ void PairThreebodyTable::uf_lookup(Param *pm, double r12, double r13, double the
   f31 = pm->mltable->f31file[itable];
   f32 = pm->mltable->f32file[itable];
   u = pm->mltable->efile[itable];
+  std::cout<<"itab forces"<<f11<<"\t"<<f12<<"\t"<<f21<<"\t"<<f22<<"\t"<<f31<<"\t"<<f32<<std::endl;
 }
 
 /* ---------------------------------------------------------------------- */
