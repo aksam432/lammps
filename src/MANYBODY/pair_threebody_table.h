@@ -57,6 +57,7 @@ class PairThreebodyTable : public Pair {
     Table *mltable;             // threebody table
   };
 
+  int    uf_index(Param *,  int, int, int);
   double interpolate1D(double, double, double);
   double interpolate2D(double, double, double, double, double, double);
   double interpolate3D(double, double, double, double, double, double, double, double, double,double,double);

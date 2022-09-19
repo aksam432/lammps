@@ -711,6 +711,41 @@ void PairThreebodyTable::null_table(Table *tb)
   tb->efile = nullptr;
 }
 
+/*------------------------------------------------------------------------
+ * Calculate index value for the table
+--------------------------------------------------------------------------*/
+
+int PairThreebodyTable::uf_index(Param *pm,  int lbin, int rbin, int ntheta)
+{
+	int swap, itable=0; 
+	if (pm->symmetric)
+	{
+//		std::cout<<"rbin:"<<rbin<<std::endl;
+//		std::cout<<"lbin:"<<lbin<<std::endl;
+		if (lbin > rbin)  // Due to symmetry  shortest distance should come in lbin
+		{
+			swap=rbin;
+			rbin=lbin;
+			lbin=swap;
+		}
+
+		rbin-=lbin;
+//		std::cout<<"Subtracted bin:"<<rbin<<std::endl;
+    	for (int i = 0; i < lbin; i++) { itable += (pm->mltable->ninput - i); }
+    	itable += rbin;
+    	itable *= (pm->mltable->ninput * 2);
+    	itable += ntheta;
+	}
+	else 
+	{
+		itable = lbin * (pm->mltable->ninput);
+    	itable += rbin;
+    	itable *= (pm->mltable->ninput * 2);
+    	itable += ntheta;
+//		std::cout<<"Assymetric:"<<itable<<std::endl;
+	}
+	return itable;
+}
 /* ----------------------------------------------------------------------
    calculate potential u and force f at angle x
 ------------------------------------------------------------------------- */
@@ -719,15 +754,18 @@ void PairThreebodyTable::uf_lookup(Param *pm, double r12, double r13, double the
                                    double &f12, double &f21, double &f22, double &f31, double &f32,
                                    double &u)
 {
-  int i, itable, nr12, nr13, ntheta;
-  double dr, dtheta;
+  int i, itable, nr12, nr13, ntheta, nr12_l, nr12_r, nr13_l, nr13_r, ntheta_l, ntheta_r;
+  int v000,v100,v010,v110,v001,v101,v011,v111;
+  double dr, dtheta, x_d, y_d, z_d;
+  std::vector<int> indices;
+  std::vector<double> vf11,vf12,vf21,vf22,vf31,vf32;
   dr = (pm->mltable->rmax - pm->mltable->rmin) / (pm->mltable->ninput - 1);
   dtheta = (180.0 - 0.0) / (pm->mltable->ninput * 2);
 
   //lookup scheme
 
   // if it is a symmetric threebody interaction, less table entries are required
-  if (pm->symmetric) {
+/*  if (pm->symmetric) {
     nr12 = (r12 - pm->mltable->rmin + 0.5 * dr - 0.00000001) / dr;
     if (r12 == (pm->mltable->rmin - 0.5 * dr)) { nr12 = 0; }
     nr13 = (r13 - pm->mltable->rmin + 0.5 * dr - 0.00000001) / dr;
@@ -752,17 +790,91 @@ void PairThreebodyTable::uf_lookup(Param *pm, double r12, double r13, double the
     itable += nr13;
     itable *= (pm->mltable->ninput * 2);
     itable += ntheta;
+        }*/
+  if (r12 > pm->mltable->rmax && r12 <= (pm->mltable->rmax + 0.5 * dr))
+  {
+	  r12=pm->mltable->rmax;
   }
-  std::cout<<" itab dis theta:"<<itable<<"\t"<<r12<<"\t"<<r13<<"\t"<<theta<<std::endl;
-  std::cout<<"itab bin"<<itable<<"\t"<<nr12<<"\t"<<nr13<<"\t"<<ntheta<<std::endl;
-  f11 = pm->mltable->f11file[itable];
-  f12 = pm->mltable->f12file[itable];
-  f21 = pm->mltable->f21file[itable];
-  f22 = pm->mltable->f22file[itable];
-  f31 = pm->mltable->f31file[itable];
-  f32 = pm->mltable->f32file[itable];
-  u = pm->mltable->efile[itable];
-  std::cout<<"itab forces"<<f11<<"\t"<<f12<<"\t"<<f21<<"\t"<<f22<<"\t"<<f31<<"\t"<<f32<<std::endl;
+  nr12_l = (r12 - pm->mltable->rmin) / dr;
+  nr12_r = (r12 - pm->mltable->rmin + 1.0 * dr - 0.00000001) / dr;
+  if (r12 - pm->mltable->rmin < 0) { 
+	 nr12_l = 0;
+	 nr12_r = 0;
+	 r12    = pm->mltable->rmin;    //  This is done to get correct x_d value 
+  }  
+  if (r13 > pm->mltable->rmax && r13 <= (pm->mltable->rmax + 0.5 * dr))
+  {
+	  r13=pm->mltable->rmax;
+  }
+  nr13_l = (r13 - pm->mltable->rmin) / dr;
+  nr13_r = (r13 - pm->mltable->rmin + 1.0 * dr  - 0.00000001) / dr;
+  if (r13 - pm->mltable->rmin < 0) { 
+	 nr13_l = 0;
+	 nr13_r = 0; 
+	 r13    = pm->mltable->rmin;
+  }
+  ntheta_l = (theta - 0.00000001) / dtheta;
+  if (theta == 180.0) { ntheta_l = 79; }
+  ntheta_r = (theta + 1.0*dtheta - 0.00000001) / dtheta;
+  v000 = uf_index(pm,nr12_l,nr13_l,ntheta_l); 
+  v100 = uf_index(pm,nr12_r,nr13_l,ntheta_l); 
+  v010 = uf_index(pm,nr12_l,nr13_r,ntheta_l); 
+  v110 = uf_index(pm,nr12_r,nr13_r,ntheta_l); 
+  v001 = uf_index(pm,nr12_l,nr13_l,ntheta_r);
+  v101 = uf_index(pm,nr12_r,nr13_l,ntheta_r); 
+  v011 = uf_index(pm,nr12_l,nr13_r,ntheta_r); 
+  v111 = uf_index(pm,nr12_r,nr13_r,ntheta_r);
+//  std::cout<<" itab dis theta:"<<itable<<"\t"<<r12<<"\t"<<r13<<"\t"<<theta<<std::endl;
+//  std::cout<<"itab bin"<<itable<<"\t"<<nr12<<"\t"<<nr13<<"\t"<<ntheta<<std::endl;
+//  std::cout<<"Testing nr12_l-nr12_r:"<<nr12_l<<"--"<<nr12_r<<std::endl;
+//  std::cout<<"Testing nr13_l-nr13_r:"<<nr13_l<<"--"<<nr13_r<<std::endl;
+//  std::cout<<"Testing ang_l-ang_r:"<<ntheta_l<<"--"<<ntheta_r<<std::endl;
+//  std::cout<<"Testing 000:"<<v000<<std::endl;
+//  std::cout<<"Testing 100:"<<v100<<std::endl;
+//  std::cout<<"Testing 010:"<<v010<<std::endl;
+//  std::cout<<"Testing 110:"<<v110<<std::endl;
+//  std::cout<<"Testing 001:"<<v001<<std::endl;
+//  std::cout<<"Testing 101:"<<v101<<std::endl;
+//  std::cout<<"Testing 011:"<<v011<<std::endl;
+//  std::cout<<"Testing 111:"<<v111<<std::endl;
+  indices.insert(indices.end(),{v000,v100,v010,v110,v001,v101,v011,v111});
+  for (int index : indices)
+	{
+		std::cout<<index<<std::endl;
+		vf11.push_back(pm->mltable->f11file[index]);
+		vf12.push_back(pm->mltable->f12file[index]);
+		vf21.push_back(pm->mltable->f21file[index]);
+		vf22.push_back(pm->mltable->f22file[index]);
+		vf31.push_back(pm->mltable->f31file[index]);
+		vf32.push_back(pm->mltable->f32file[index]);
+
+	}
+//	for (double force : vf11) {std::cout<<force<<std::endl;}  		  
+//  f11 = pm->mltable->f11file[itable];
+//  f12 = pm->mltable->f12file[itable];
+//  f21 = pm->mltable->f21file[itable];
+//  f22 = pm->mltable->f22file[itable];
+//  f31 = pm->mltable->f31file[itable];
+//  f32 = pm->mltable->f32file[itable];
+//  u = pm->mltable->efile[itable];
+//
+//  std::cout<<"r12 lowest"<<pm->mltable->r12file[v000]<<std::endl;
+//  std::cout<<"r13 lowest"<<pm->mltable->r13file[v000]<<std::endl;
+//  std::cout<<"theta lowest"<<pm->mltable->thetafile[v000]<<std::endl;
+  x_d = (r12 - pm->mltable->r12file[v000])/dr;
+  y_d = (r13 - pm->mltable->r13file[v000])/dr;
+  z_d = (theta - pm->mltable->thetafile[v000])/dtheta;
+
+//  std::cout<<"itab forces"<<f11<<"\t"<<f12<<"\t"<<f21<<"\t"<<f22<<"\t"<<f31<<"\t"<<f32<<std::endl;
+  f11 = interpolate3D(vf11[0],vf11[1],vf11[2],vf11[3],vf11[4],vf11[5],vf11[6],vf11[7],x_d,y_d,z_d);
+  f12 = interpolate3D(vf12[0],vf12[1],vf12[2],vf12[3],vf12[4],vf12[5],vf12[6],vf12[7],x_d,y_d,z_d);
+  f21 = interpolate3D(vf21[0],vf21[1],vf21[2],vf21[3],vf21[4],vf21[5],vf21[6],vf21[7],x_d,y_d,z_d);
+  f22 = interpolate3D(vf22[0],vf22[1],vf22[2],vf22[3],vf22[4],vf22[5],vf22[6],vf22[7],x_d,y_d,z_d);
+  f31 = interpolate3D(vf31[0],vf31[1],vf31[2],vf31[3],vf31[4],vf31[5],vf31[6],vf31[7],x_d,y_d,z_d);
+  f32 = interpolate3D(vf32[0],vf32[1],vf32[2],vf32[3],vf32[4],vf32[5],vf32[6],vf32[7],x_d,y_d,z_d);
+
+//  std::cout<<"itab forces"<<f11<<"\t"<<f12<<"\t"<<f21<<"\t"<<f22<<"\t"<<f31<<"\t"<<f32<<std::endl;
+  
 }
 
 /* ---------------------------------------------------------------------- */
